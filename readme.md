@@ -1,0 +1,1 @@
+Replace constraints.xpr with the constraints file for your board, make sure that the uart, clock, and reset pins match the names in top.v. In top.v, modify the clk_speed parameter to match the speed of the clock on your board. Generate bitstream and push to your board to test with part1.py.
