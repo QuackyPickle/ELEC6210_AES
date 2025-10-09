@@ -68,12 +68,7 @@ module top(
                 end
                 
                 WAIT2: begin
-                
-                    if (counter < 255) begin
-                        counter <= counter + 1;
-                    end else begin
-                        state <= COMPUTE;
-                    end
+                    state <= COMPUTE;
                 end
                 
                 COMPUTE: begin
