@@ -41,11 +41,11 @@ module top(
                WAIT_TX  = 3'b100,
                WAIT2    = 3'b101;
     reg [2:0] state;
-    reg [3:0] a, b;
-    wire cout;
-    wire [3:0] sum;
-    
-    adder add(.a1(a), .a2(b), .c_in(1'b0), .s(sum), .c_out(cout));
+    reg [7:0] byte;
+    reg [7:0] counter;
+    wire [7:0] out;
+
+    s_box s(.in_byte(byte), .out_byte(out));
     
     always @(posedge clk) begin
         if (rst) begin
@@ -54,8 +54,7 @@ module top(
         
             case (state)
                 RST: begin
-                    a             <= 4'b0;
-                    b             <= 4'b0;
+                    byte          <= 8'b0;
                     tx_byte       <= 8'b0;
                     tx_start      <= 1'b0;
                     state         <= WAIT;
@@ -63,18 +62,23 @@ module top(
                 
                 WAIT: begin
                     if (rx_done) begin
-                        a <= rx_byte[7:4];
-                        b <= rx_byte[3:0];
+                        byte = rx_byte;
                         state <= WAIT2;
                     end
                 end
                 
                 WAIT2: begin
-                    state <= COMPUTE;
+                
+                    if (counter < 255) begin
+                        counter <= counter + 1;
+                    end else begin
+                        state <= COMPUTE;
+                    end
                 end
                 
                 COMPUTE: begin
-                    tx_byte <= {3'b000, cout, sum};
+                    counter <= 0;
+                    tx_byte <= out;
                     state <= START_TX;
                 end
                 
@@ -92,17 +96,4 @@ module top(
             endcase
         end
     end
-endmodule
-   
-   
-module adder(
-    input [3:0] a1,
-    input [3:0] a2,
-    input c_in,
-    output [3:0] s,
-    output c_out
-    );
-    
-    assign {c_out, s} = a1 + a2 + c_in;
-     
 endmodule
