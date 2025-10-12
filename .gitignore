@@ -76,6 +76,9 @@
 *.runs/impl*/*.bat
 !*.runs/impl*/*utilization*.rpt
 
+### project sim
+*.sim/sim*/
+
 ### block design
 */*/bd/*/hdl
 */*/*/bd/*/hdl
