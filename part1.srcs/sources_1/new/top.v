@@ -4,89 +4,91 @@ module top(
    output      o_tx,
    input       rst
    );
-   
-   reg tx_start;
-   wire rx_done;
-   wire tx_done;
-   wire tx_busy;
-   reg [7:0] tx_byte;
-   wire [7:0] rx_byte;   
-   
-   parameter integer baud = 115200;
-   parameter integer clk_speed = 12_000_000;
-   parameter integer clk_per_baud = clk_speed / baud;
-   
-        
-        uart_tx #(.CLKS_PER_BIT(clk_per_baud)) U_TX (
-        .i_Clock(clk),
-        .i_Tx_DV(tx_start),
-        .i_Tx_Byte(tx_byte),
-        .o_Tx_Active(tx_busy),
-        .o_Tx_Serial(o_tx),
-        .o_Tx_Done(tx_done)
-        );
-        
-        uart_rx #(.CLKS_PER_BIT(clk_per_baud)) U_RX (
-        .i_Clock(clk),
-        .i_Rx_Serial(i_rx),
-        .o_Rx_DV(rx_done),
-        .o_Rx_Byte(rx_byte)
+
+    wire        rx_valid;
+    wire        tx_done;
+    wire        tx_busy;
+    wire        rx_busy;
+    reg  [2:0]  state;
+    reg         start_tx;
+
+    wire  [255:0] my_256bit_bus;
+    reg  [127:0] my_128bit_bus;
+    reg  [255:0] bus_256;
+    reg  [127:0] out_bus_1;
+    reg  [127:0] out_bus_2;
+
+    uart_sm #(.BAUD(115200), .CLK_SPEED(12_000_000)) UART_LINK (
+        .clk(clk),
+        .reset(rst),
+        .i_rx(i_rx),
+        .o_tx(o_tx),
+        .tx_start(start_tx),
+        .tx_done(tx_done),
+        .tx_busy(tx_busy),
+        .rx_busy(rx_busy),
+        .rx_done_really(rx_valid),
+        .rx_words(my_256bit_bus),
+        .tx_words(my_128bit_bus)
     );
-   
 
     localparam RST      = 3'b000,
                WAIT     = 3'b001,
                COMPUTE  = 3'b010,
                START_TX = 3'b011,
-               WAIT_TX  = 3'b100,
-               WAIT2    = 3'b101;
-    reg [2:0] state;
-    reg [7:0] byte;
-    reg [7:0] counter;
-    wire [7:0] out;
+               WAIT_TX1 = 3'b100,
+               START_TX2= 3'b101,
+               WAIT_TX2 = 3'b110;
 
-    s_box s(.in_byte(byte), .out_byte(out));
-    
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
-            state <= RST;
+            state       <= WAIT;
+            start_tx    <= 1'b0;
+            bus_256     <= 256'b0;
+            out_bus_1   <= 128'b0;
+            out_bus_2   <= 128'b0;
+            my_128bit_bus <= 128'b0;
         end else begin
-        
             case (state)
-                RST: begin
-                    byte          <= 8'b0;
-                    tx_byte       <= 8'b0;
-                    tx_start      <= 1'b0;
-                    state         <= WAIT;
-                end
-                
                 WAIT: begin
-                    if (rx_done) begin
-                        byte = rx_byte;
-                        state <= WAIT2;
+                    start_tx <= 1'b0;
+                    if (rx_valid) begin
+                        bus_256 <= my_256bit_bus;
+                        state   <= COMPUTE;
                     end
                 end
-                
-                WAIT2: begin
-                    state <= COMPUTE;
-                end
-                
+
                 COMPUTE: begin
-                    counter <= 0;
-                    tx_byte <= out;
-                    state <= START_TX;
+                    out_bus_1      <= my_256bit_bus[255:128];
+                    out_bus_2      <= my_256bit_bus[127:0];
+                    my_128bit_bus  <= my_256bit_bus[255:128];
+                    start_tx       <= 1'b1;    // pulse start
+                    state          <= START_TX;
                 end
-                
+
                 START_TX: begin
-                    tx_start <= 1'b1;
-                    state <= WAIT_TX;
+                    start_tx <= 1'b0;          // pulse done
+                    if (tx_done)               // first TX done
+                        state <= WAIT_TX1;
                 end
-                
-                WAIT_TX: begin
-                    tx_start <= 1'b0;
-                    if (tx_done == 1'b1) begin                    
-                        state <= RST;
+
+                WAIT_TX1: begin
+                    if (!tx_done && !tx_busy) begin
+                        my_128bit_bus <= out_bus_2; // next half
+                        start_tx      <= 1'b1;      // pulse start again
+                        state         <= START_TX2;
                     end
+                end
+
+                START_TX2: begin
+                    start_tx <= 1'b0;
+                    if (tx_done)
+                        state <= WAIT_TX2;
+                end
+
+                WAIT_TX2: begin
+                    if (!tx_done && !tx_busy)
+                        state <= WAIT;
                 end
             endcase
         end
