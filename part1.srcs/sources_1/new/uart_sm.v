@@ -12,7 +12,7 @@ module uart_sm
         // Control I/O
         input  wire tx_start,
         input  wire [127:0] tx_words,
-        output reg  [127:0] rx_words,
+        output reg  [255:0] rx_words,
 
         output reg  tx_done,       // high for one cycle when done sending 16 bytes
         output reg  rx_done_really,// high when 32 bytes received
@@ -75,7 +75,7 @@ module uart_sm
                     rx_count       <= 0;
                     if (rx_dv) begin
                         rx_busy  <= 1'b1;
-                        rx_words <= {rx_words[127:0], rx_byte};
+                        rx_words <= {rx_words[255:0], rx_byte};
                         rx_count <= 1;
                         rx_state <= RX_RECV;
                     end
@@ -83,9 +83,9 @@ module uart_sm
 
                 RX_RECV: begin
                     if (rx_dv) begin
-                        rx_words <= {rx_words[127:0], rx_byte};
+                        rx_words <= {rx_words[255:0], rx_byte};
                         rx_count <= rx_count + 1'b1;
-                        if (rx_count == 8'd15)
+                        if (rx_count == 8'd31)
                             rx_state <= RX_DONE;
                     end
                 end

@@ -10,9 +10,9 @@ module top(
    // UART signals
    reg         tx_start;
    wire        rx_valid, tx_done, tx_busy;
-   reg [127:0] tx_byte;
-   wire [127:0] rx_byte;   
-   
+   reg  [127:0] tx_byte;
+   wire [255:0] rx_byte;
+
    // UART module
    uart_sm #(.BAUD(115200), .CLK_SPEED(12_000_000)) UART_LINK (
         .clk(clk),
@@ -37,33 +37,44 @@ module top(
 
     reg [2:0] state;
     reg [127:0] byte;
+    reg [127:0] key_in;
+
+    wire [127:0] k0, k1;
+    wire [127:0] dummy[2:10]; 
+
+    key_generator u_keygen (
+        .key_in(key_in),
+        .k0(k0), .k1(k1),
+        .k2(dummy[2]), .k3(dummy[3]), .k4(dummy[4]),
+        .k5(dummy[5]), .k6(dummy[6]), .k7(dummy[7]),
+        .k8(dummy[8]), .k9(dummy[9]), .k10(dummy[10])
+    );
 
     wire [127:0] sub_bytes_out;
+    wire [127:0] shift_rows_out;
+    wire [127:0] mix_columns_out;
 
     sub_bytes u_sub_bytes (
         .in(byte),
         .out(sub_bytes_out)
     );
 
-    wire [127:0] shift_rows_out;
-
     shift_rows u_shift_rows (
         .in(sub_bytes_out),
         .out(shift_rows_out)
     );
-    
-    wire [127:0] mc_out;
-    
+
     mix_columns u_mix_columns (
         .in(shift_rows_out),
-        .out(mc_out)
+        .out(mix_columns_out)
     );
 
     // --- State Machine ---
     always @(posedge clk) begin
         if (rst) begin
             state     <= RST;
-            byte      <= 128'b0;
+            byte  <= 128'b0;
+            key_in    <= 128'b0;
             tx_byte   <= 128'b0;
             tx_start  <= 1'b0;
         end else begin
@@ -71,20 +82,21 @@ module top(
                 RST: begin
                     state <= WAIT;
                 end
-
+                
                 WAIT: begin
                     if (rx_valid) begin
-                        byte  <= rx_byte;
-                        state <= WAIT2;
+                        key_in   <= rx_byte[255:128];
+                        byte     <= rx_byte[127:0];
+                        state    <= WAIT2;
                     end
                 end
-
+                
                 WAIT2: begin
                     state <= COMPUTE;
                 end
 
                 COMPUTE: begin
-                    tx_byte <= mc_out;  // Send the full output
+                    tx_byte <= mix_columns_out ^ k1; // AddRoundKey
                     state   <= START_TX;
                 end
 
@@ -102,6 +114,3 @@ module top(
         end
     end
 endmodule
-
-
-
