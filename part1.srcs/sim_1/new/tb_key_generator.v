@@ -15,7 +15,6 @@ module tb_key_generator;
 
     // Expected round keys for AES-128 with key:
     // 2b7e151628aed2a6abf7158809cf4f3c
-    // Source: FIPS-197, App. A.1 (words grouped into 128-bit round keys)
     localparam [127:0] EXP_K0  = 128'h2b7e1516_28aed2a6_abf71588_09cf4f3c;
     localparam [127:0] EXP_K1  = 128'ha0fafe17_88542cb1_23a33939_2a6c7605;
     localparam [127:0] EXP_K2  = 128'hf2c295f2_7a96b943_5935807a_7359f67f;
