@@ -1,19 +1,19 @@
 `timescale 1ns / 1ps
 
 module top(
-   input       i_rx,
-   input       clk,
-   output      o_tx,
-   input       rst
+    input        i_rx,
+    input        clk,
+    output       o_tx,
+    input        rst
 );
-   
-   // UART signals
+	
+	// UART signals
    reg         tx_start;
    wire        rx_valid, tx_done, tx_busy;
    reg  [127:0] tx_byte;
    wire [255:0] rx_byte;
 
-   // UART module
+    // UART module
    uart_sm #(.BAUD(115200), .CLK_SPEED(12_000_000)) UART_LINK (
         .clk(clk),
         .reset(rst),
@@ -26,91 +26,82 @@ module top(
         .rx_words(rx_byte),
         .tx_words(tx_byte)
     );
+			   
+	// FSM states
+    localparam RST      = 2'b00,
+               WAIT     = 2'b01,
+               COMPUTE  = 2'b10,
+               START_TX = 2'b11;
 
-    // FSM states
-    localparam RST      = 3'b000,
-               WAIT     = 3'b001,
-               COMPUTE  = 3'b010,
-               START_TX = 3'b011,
-               WAIT_TX  = 3'b100,
-               WAIT2    = 3'b101;
+    reg [1:0] state;
 
-    reg [2:0] state;
-    reg [127:0] byte;
-    reg [127:0] key_in;
+    reg  [127:0] plaintext_reg;
+    reg  [127:0] key_in;
+    wire [127:0] ciphertext;
 
-    wire [127:0] k0, k1;
-    wire [127:0] dummy[2:10]; 
+    wire [127:0] k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10;
 
     key_generator u_keygen (
         .key_in(key_in),
-        .k0(k0), .k1(k1),
-        .k2(dummy[2]), .k3(dummy[3]), .k4(dummy[4]),
-        .k5(dummy[5]), .k6(dummy[6]), .k7(dummy[7]),
-        .k8(dummy[8]), .k9(dummy[9]), .k10(dummy[10])
+        .k0(k0), .k1(k1), .k2(k2), .k3(k3), .k4(k4),
+        .k5(k5), .k6(k6), .k7(k7), .k8(k8), .k9(k9), .k10(k10)
     );
 
-    wire [127:0] sub_bytes_out;
-    wire [127:0] shift_rows_out;
-    wire [127:0] mix_columns_out;
+    wire [127:0] r0_out, r1_out, r2_out, r3_out, r4_out, r5_out, r6_out, r7_out, r8_out, r9_out, r10_out;
 
-    sub_bytes u_sub_bytes (
-        .in(byte),
-        .out(sub_bytes_out)
-    );
+    assign r0_out = plaintext_reg ^ k0;
 
-    shift_rows u_shift_rows (
-        .in(sub_bytes_out),
-        .out(shift_rows_out)
-    );
+    aes_round r1 (.clk(clk), .in(r0_out), .key(k1), .out(r1_out));
+    aes_round r2 (.clk(clk), .in(r1_out), .key(k2), .out(r2_out));
+    aes_round r3 (.clk(clk), .in(r2_out), .key(k3), .out(r3_out));
+    aes_round r4 (.clk(clk), .in(r3_out), .key(k4), .out(r4_out));
+    aes_round r5 (.clk(clk), .in(r4_out), .key(k5), .out(r5_out));
+    aes_round r6 (.clk(clk), .in(r5_out), .key(k6), .out(r6_out));
+    aes_round r7 (.clk(clk), .in(r6_out), .key(k7), .out(r7_out));
+    aes_round r8 (.clk(clk), .in(r7_out), .key(k8), .out(r8_out));
+    aes_round r9 (.clk(clk), .in(r8_out), .key(k9), .out(r9_out));
 
-    mix_columns u_mix_columns (
-        .in(shift_rows_out),
-        .out(mix_columns_out)
-    );
+    aes_final_round r10 (.clk(clk), .in(r9_out), .key(k10), .out(r10_out));
 
-    // --- State Machine ---
-    always @(posedge clk) begin
+    assign ciphertext = r10_out;
+
+    // State-Machine logic
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
-            state     <= RST;
-            byte  <= 128'b0;
-            key_in    <= 128'b0;
-            tx_byte   <= 128'b0;
-            tx_start  <= 1'b0;
+            state <= RST;
+            tx_start <= 0;
+            tx_words <= 0;
+            plaintext_reg <= 0;
+            key_in <= 0;
         end else begin
+            tx_start <= 0;
             case (state)
                 RST: begin
-                    state <= WAIT;
-                end
-                
-                WAIT: begin
                     if (rx_valid) begin
-                        key_in   <= rx_byte[255:128];
-                        byte     <= rx_byte[127:0];
-                        state    <= WAIT2;
+                        plaintext_reg <= rx_words[127:0];
+                        key_in        <= rx_words[255:128];
+                        state <= COMPUTE;
                     end
-                end
-                
-                WAIT2: begin
-                    state <= COMPUTE;
                 end
 
                 COMPUTE: begin
-                    tx_byte <= mix_columns_out ^ k1; // AddRoundKey
-                    state   <= START_TX;
+                    tx_words <= ciphertext;
+                    state <= START_TX;
                 end
 
                 START_TX: begin
-                    tx_start <= 1'b1;
-                    state <= WAIT_TX;
+                    if (!tx_busy) begin
+                        tx_start <= 1'b1;
+                        state <= WAIT;
+                    end
                 end
 
-                WAIT_TX: begin
-                    tx_start <= 1'b0;
+                WAIT: begin
                     if (tx_done)
-                        state <= RST;
+                        state <= ST_IDLE;
                 end
             endcase
         end
     end
+
 endmodule
