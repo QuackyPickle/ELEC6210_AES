@@ -4,9 +4,8 @@ module top(
     input        i_rx,
     input        clk,
     output       o_tx,
-    input        rst_n
+    input        rst
 );
-	wire rst = ~rst_n;
 	
 	// UART signals
    reg         tx_start;
