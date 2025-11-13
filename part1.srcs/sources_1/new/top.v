@@ -4,8 +4,9 @@ module top(
     input        i_rx,
     input        clk,
     output       o_tx,
-    input        rst
+    input        rst_n
 );
+	wire rst = ~rst_n;
 	
 	// UART signals
    reg         tx_start;
@@ -14,7 +15,7 @@ module top(
    wire [255:0] rx_byte;
 
     // UART module
-   uart_sm #(.BAUD(115200), .CLK_SPEED(12_000_000)) UART_LINK (
+   uart_sm #(.BAUD(115200), .CLK_SPEED(100_000_000)) UART_LINK (
         .clk(clk),
         .reset(rst),
         .i_rx(i_rx),
@@ -70,7 +71,7 @@ module top(
         if (rst) begin
             state <= RST;
             tx_start <= 0;
-            tx_words <= 0;
+            tx_byte <= 0;
             plaintext_reg <= 0;
             key_in <= 0;
         end else begin
@@ -78,14 +79,14 @@ module top(
             case (state)
                 RST: begin
                     if (rx_valid) begin
-                        plaintext_reg <= rx_words[127:0];
-                        key_in        <= rx_words[255:128];
+                        plaintext_reg <= rx_byte[127:0];
+                        key_in        <= rx_byte[255:128];
                         state <= COMPUTE;
                     end
                 end
 
                 COMPUTE: begin
-                    tx_words <= ciphertext;
+                    tx_byte <= ciphertext;
                     state <= START_TX;
                 end
 
@@ -98,7 +99,7 @@ module top(
 
                 WAIT: begin
                     if (tx_done)
-                        state <= ST_IDLE;
+                        state <= RST;
                 end
             endcase
         end

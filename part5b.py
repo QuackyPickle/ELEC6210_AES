@@ -1,6 +1,7 @@
 import sys, time, serial, random
+from AES_Python import AES
 
-SERIAL_PORT = "COM6"
+SERIAL_PORT = "COM3"
 BAUD_RATE = 115200
 NUM_TESTS = 20
 
